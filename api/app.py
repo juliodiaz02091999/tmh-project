@@ -6,7 +6,12 @@ import numpy as np
 from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
-from tmh_infer import TMHInferencer
+try:
+    # When running as a package (e.g. `uvicorn api.app:app`)
+    from api.tmh_infer import TMHInferencer
+except ModuleNotFoundError:
+    # When running from within /api (e.g. `uvicorn app:app`)
+    from tmh_infer import TMHInferencer
 
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
