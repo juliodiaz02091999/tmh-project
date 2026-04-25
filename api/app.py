@@ -1,4 +1,5 @@
 import os
+import threading
 
 import cv2
 import numpy as np
@@ -24,16 +25,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+_inferencer: TMHInferencer | None = None
+_inferencer_lock = threading.Lock()
 
-inferencer = TMHInferencer(
-    model_a_path=MODEL_A_PATH,
-    model_b_path=MODEL_B_PATH,
-)
+
+def get_inferencer() -> TMHInferencer:
+    global _inferencer
+    if _inferencer is not None:
+        return _inferencer
+    with _inferencer_lock:
+        if _inferencer is None:
+            _inferencer = TMHInferencer(
+                model_a_path=MODEL_A_PATH,
+                model_b_path=MODEL_B_PATH,
+            )
+    return _inferencer
 
 
 @app.get("/health")
 def health():
-    return {"ok": True}
+    return {"ok": True, "models_loaded": _inferencer is not None}
 
 
 @app.post("/analyze")
@@ -41,7 +52,7 @@ async def analyze_image(image: UploadFile = File(...)):
     contents = await image.read()
     arr = np.frombuffer(contents, dtype=np.uint8)
     img_bgr = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-    result = inferencer.infer_from_bgr(img_bgr)
+    result = get_inferencer().infer_from_bgr(img_bgr)
     return {
         "tmh_mm": result.tmh_mm,
         "diagnosis": result.diagnosis,
