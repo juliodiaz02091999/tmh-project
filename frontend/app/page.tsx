@@ -11,10 +11,6 @@ type AnalyzeResponse =
     }
   | { error: string };
 
-function getApiBaseUrl() {
-  return process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
-}
-
 export default function HomePage() {
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -30,7 +26,7 @@ export default function HomePage() {
     try {
       const form = new FormData();
       form.append("image", f);
-      const res = await fetch(`${getApiBaseUrl()}/analyze`, {
+      const res = await fetch(`/api/analyze`, {
         method: "POST",
         body: form,
       });
@@ -92,9 +88,7 @@ export default function HomePage() {
               className="hidden"
               onChange={(e) => onPickFile(e.target.files?.[0] ?? null)}
             />
-            <div className="text-xs text-white/50">
-              API: <span className="text-white/70">{getApiBaseUrl()}</span>
-            </div>
+            <div className="text-xs text-white/50">API: /api (rewrite)</div>
           </div>
 
           {previewUrl ? (
