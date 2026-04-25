@@ -20,7 +20,7 @@ COPY api/ /app/api/
 
 # Copy model weights into /app (root_dir in app.py points here)
 COPY model_a_fixed_iris.pth /app/model_a_fixed_iris.pth
-COPY "model_b_eyelid (2).pth" "/app/model_b_eyelid (2).pth"
+COPY ["model_b_eyelid (2).pth", "/app/model_b_eyelid (2).pth"]
 
 ENV PORT=8080
 EXPOSE 8080
