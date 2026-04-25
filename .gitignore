@@ -27,6 +27,10 @@ Thumbs.db
 .vscode/
 .claude/
 
+# Local images / outputs
+tmh*.PNG
+tmh_resultado_final.png
+
 # Local env files
 .env
 .env.*
