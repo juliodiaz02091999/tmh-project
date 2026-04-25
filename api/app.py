@@ -17,7 +17,7 @@ except ModuleNotFoundError:
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 MODEL_A_PATH = os.path.join(ROOT_DIR, "model_a_fixed_iris.pth")
-MODEL_B_PATH = os.path.join(ROOT_DIR, "model_b_eyelid (2).pth")
+MODEL_B_PATH = os.path.join(ROOT_DIR, "model_b_meniscus_new.pth")
 
 
 app = FastAPI(title="TMH API", version="0.1.0")
