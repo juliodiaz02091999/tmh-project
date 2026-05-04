@@ -17,6 +17,7 @@ export default function HomePage() {
   const [result, setResult] = useState<AnalyzeResponse | null>(null);
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const cameraRef = useRef<HTMLInputElement | null>(null);
 
   const canAnalyze = useMemo(() => !!file && !busy, [file, busy]);
 
@@ -47,8 +48,7 @@ export default function HomePage() {
   }
 
   async function takePhoto() {
-    // Minimal approach: open native camera capture on mobile via input capture.
-    inputRef.current?.click();
+    cameraRef.current?.click();
   }
 
   return (
@@ -82,6 +82,13 @@ export default function HomePage() {
             </button>
             <input
               ref={inputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => onPickFile(e.target.files?.[0] ?? null)}
+            />
+            <input
+              ref={cameraRef}
               type="file"
               accept="image/*"
               capture="environment"
