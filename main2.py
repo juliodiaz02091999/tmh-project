@@ -20,7 +20,7 @@ from albumentations.pytorch import ToTensorV2
 # ============================================================
 
 # Cambia esta ruta por tu imagen
-IMAGE_PATH = "tmh4.PNG"
+IMAGE_PATH = "tmh3.PNG"
 
 # Modelo A corregido para iris
 MODEL_A_PATH = "model_a_fixed_iris.pth"
@@ -403,7 +403,7 @@ def calculate_tmh_from_model_b_robust(img_rgb, pred_B, iris_info):
         }
 
     # Medición robusta: mediana por columnas.
-    tmh_px = float(np.median(column_heights))
+    tmh_px = float(np.percentile(column_heights, 25))
 
     target_idx = int(np.argmin(np.abs(np.array(column_heights) - tmh_px)))
     x_mid, y_top_mid, y_bottom_mid, h_mid = column_data[target_idx]

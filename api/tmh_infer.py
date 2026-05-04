@@ -1,3 +1,4 @@
+import math
 import os
 from dataclasses import dataclass
 
@@ -81,8 +82,8 @@ class TMHInferencer:
         if not os.path.exists(self.model_b_path):
             raise FileNotFoundError(f"MODEL_B_PATH no existe: {self.model_b_path}")
 
-        self.model_a.load_state_dict(torch.load(self.model_a_path, map_location=self.device))
-        self.model_b.load_state_dict(torch.load(self.model_b_path, map_location=self.device))
+        self.model_a.load_state_dict(torch.load(self.model_a_path, map_location=self.device, weights_only=False))
+        self.model_b.load_state_dict(torch.load(self.model_b_path, map_location=self.device, weights_only=False))
         self.model_a.eval()
         self.model_b.eval()
 
@@ -100,7 +101,7 @@ class TMHInferencer:
         with torch.no_grad():
             logits = self.model_a(tensor)
             if isinstance(logits, dict):
-                logits = logits.get("out") or logits.get("logits")
+                logits = logits.get("out") if logits.get("out") is not None else logits["logits"]
             pred = torch.argmax(logits, dim=1).squeeze(0).cpu().numpy().astype(np.uint8)
         return cv2.resize(pred, (w, h), interpolation=cv2.INTER_NEAREST)
 
@@ -110,13 +111,13 @@ class TMHInferencer:
         with torch.no_grad():
             logits = self.model_b(tensor)
             if isinstance(logits, dict):
-                logits = logits.get("out") or logits.get("logits")
+                logits = logits.get("out") if logits.get("out") is not None else logits["logits"]
             prob = torch.sigmoid(logits).squeeze().cpu().numpy()
         prob = cv2.resize(prob, (w, h), interpolation=cv2.INTER_LINEAR)
         mask = (prob >= threshold).astype(np.uint8)
         return prob, mask
 
-    def _get_iris_info(self, pred_a: np.ndarray, iris_class_id: int = 1) -> dict:
+    def _get_iris_info(self, pred_a: np.ndarray, iris_class_id: int = 1, img_shape: tuple | None = None) -> dict:
         iris_mask = (pred_a == iris_class_id).astype(np.uint8)
         kernel = np.ones((3, 3), np.uint8)
         iris_mask = cv2.morphologyEx(iris_mask, cv2.MORPH_OPEN, kernel)
@@ -128,14 +129,22 @@ class TMHInferencer:
         iris_cnt = max(cnts, key=cv2.contourArea)
         if len(iris_cnt) >= 5:
             (cx, cy), (axis1, axis2), _ = cv2.fitEllipse(iris_cnt)
-            iris_diam_px = float(min(axis1, axis2))
+            # Geometric mean avoids underestimation when eyelids occlude the iris
+            # (min axis shrinks when top/bottom is cut, inflating tmh_mm = px*11.5/diam).
+            iris_diam_px = float(math.sqrt(axis1 * axis2))
         else:
             x, y, ww, hh = cv2.boundingRect(iris_cnt)
             cx = x + ww / 2.0
             cy = y + hh / 2.0
-            iris_diam_px = float(min(ww, hh))
-        if iris_diam_px < 20:
-            raise RuntimeError(f"Iris demasiado pequeño: {iris_diam_px:.2f}px")
+            iris_diam_px = float(math.sqrt(ww * hh))
+
+        # Sanity check: iris must be at least 7 % of the larger image dimension.
+        img_h, img_w = img_shape if img_shape else pred_a.shape[:2]
+        min_expected = max(img_h, img_w) * 0.07
+        if iris_diam_px < max(20.0, min_expected):
+            raise RuntimeError(
+                f"Iris demasiado pequeño ({iris_diam_px:.1f}px) — posible detección errónea"
+            )
         return {
             "iris_diam_px": float(iris_diam_px),
             "iris_cx": int(round(float(cx))),
@@ -193,8 +202,10 @@ class TMHInferencer:
         def score_candidate(c: dict) -> float:
             dist_x = abs(float(c["cx"]) - iris_cx) / iris_diam_px
             dist_y = abs(float(c["cy"]) - (iris_cy + 0.45 * iris_diam_px)) / iris_diam_px
-            area_bonus = -0.0003 * float(c["area"])
-            return float(dist_x + dist_y + area_bonus)
+            # Small bonus for wider components (more arc = more likely real meniscus),
+            # capped so it can never override spatial proximity (max -0.2 vs dist range 0..~1).
+            width_bonus = -0.2 * min(float(c["w"]) / iris_diam_px, 1.0)
+            return float(dist_x + dist_y + width_bonus)
 
         best = min(candidates, key=score_candidate)
         component = (labels == best["idx"]).astype(np.uint8)
@@ -212,13 +223,16 @@ class TMHInferencer:
             y_top = int(y_col.min())
             y_bottom = int(y_col.max())
             height = y_bottom - y_top + 1
-            if 1 <= height <= int(0.25 * iris_diam_px):
+            # Cap at 20 % of iris diameter (hard max 35 px) — real meniscus is thin.
+            max_col_h = min(int(0.20 * iris_diam_px), 35)
+            if 1 <= height <= max(max_col_h, 3):
                 column_heights.append(height)
 
         if not column_heights:
             raise RuntimeError("No se pudieron medir alturas válidas del menisco")
 
-        tmh_px = float(np.median(column_heights))
+        # P25 matches main2.py validated logic and is more conservative than median.
+        tmh_px = float(np.percentile(column_heights, 25))
         tmh_mm = float(tmh_px * self.iris_diameter_mm / float(iris_diam_px))
 
         if tmh_mm < 0.10:
@@ -244,7 +258,7 @@ class TMHInferencer:
             raise ValueError("Imagen inválida")
         img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
         pred_a = self._predict_model_a(img_rgb)
-        iris_info = self._get_iris_info(pred_a)
+        iris_info = self._get_iris_info(pred_a, img_shape=img_rgb.shape[:2])
         _, pred_b = self._predict_model_b(img_rgb, threshold=self.threshold_b)
         return self._calculate_tmh_mm(pred_b, iris_info=iris_info)
 

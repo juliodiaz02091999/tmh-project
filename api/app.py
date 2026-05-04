@@ -3,7 +3,7 @@ import threading
 
 import cv2
 import numpy as np
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 try:
@@ -57,7 +57,12 @@ async def analyze_image(image: UploadFile = File(...)):
     contents = await image.read()
     arr = np.frombuffer(contents, dtype=np.uint8)
     img_bgr = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-    result = get_inferencer().infer_from_bgr(img_bgr)
+    if img_bgr is None:
+        raise HTTPException(status_code=422, detail="No se pudo decodificar la imagen")
+    try:
+        result = get_inferencer().infer_from_bgr(img_bgr)
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
     return {
         "tmh_mm": result.tmh_mm,
         "diagnosis": result.diagnosis,

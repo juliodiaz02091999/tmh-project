@@ -132,7 +132,7 @@ export default function HomePage() {
                 <div className="text-2xl font-semibold">{result.tmh_mm} mm</div>
                 <div className="text-sm text-white/70">{result.diagnosis}</div>
                 <div className="text-xs text-white/50">
-                  iris_diam_px={result.iris_diam_px} · tmh_px_median={result.tmh_px_median}
+                  iris_diam_px={result.iris_diam_px} · tmh_px_p25={result.tmh_px_median}
                 </div>
               </div>
             )}
